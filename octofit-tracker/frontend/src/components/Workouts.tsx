@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { getJson } from '../api/client.js';
 
 type WorkoutSuggestion = {
@@ -7,33 +7,62 @@ type WorkoutSuggestion = {
   reason?: string;
 };
 
-const userEmail = 'mona@example.com';
-
 export default function Workouts() {
+  const [userEmail, setUserEmail] = useState('');
+  const [hasRequested, setHasRequested] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<WorkoutSuggestion[] | null>(null);
   const [hasError, setHasError] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    getJson<{ suggestions: WorkoutSuggestion[] }>(`/api/workouts/suggestions/${encodeURIComponent(userEmail)}`)
-      .then(({ suggestions: records }) => {
-        if (!cancelled) setSuggestions(records);
-      })
-      .catch(() => {
-        if (!cancelled) setHasError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const selectedEmail = userEmail.trim();
+    if (!selectedEmail) return;
+
+    setHasRequested(true);
+    setIsLoading(true);
+    setSuggestions(null);
+    setHasError(false);
+    try {
+      const result = await getJson<{ suggestions: WorkoutSuggestion[] }>(
+        `/api/workouts/suggestions/${encodeURIComponent(selectedEmail)}`,
+      );
+      setSuggestions(result.suggestions);
+    } catch {
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <section className="card h-100">
       <div className="card-body">
         <h2 className="h4">Workout suggestions</h2>
         <p>Recommend workouts from activity patterns.</p>
-        {hasError ? (
+        <form className="mb-3" onSubmit={handleSubmit}>
+          <label className="form-label" htmlFor="workout-user-email">User email</label>
+          <div className="d-flex gap-2">
+            <input
+              className="form-control"
+              disabled={isLoading}
+              id="workout-user-email"
+              onChange={(event) => setUserEmail(event.target.value)}
+              required
+              type="email"
+              value={userEmail}
+            />
+            <button className="btn btn-primary" disabled={isLoading} type="submit">
+              Get suggestions
+            </button>
+          </div>
+        </form>
+        {!hasRequested ? (
+          <p>Enter your email to view personalized suggestions.</p>
+        ) : hasError ? (
           <p role="alert">Unable to load workout suggestions.</p>
+        ) : isLoading ? (
+          <p role="status">Loading workout suggestions...</p>
         ) : suggestions === null ? (
           <p role="status">Loading workout suggestions...</p>
         ) : suggestions.length === 0 ? (
